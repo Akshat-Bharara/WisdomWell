@@ -130,6 +130,26 @@ async def upload_image(file: UploadFile = File(...), tree_json: str = Form(...))
         if image_path and image_path.exists():
             image_path.unlink()
 
+# Handle YouTube video input
+@app.post("/upload/youtube")
+async def upload_youtube(video_url: str = Form(...), tree_json: str = Form(...)):
+    try:
+        tree_data = TreeData(tree_json=json.loads(tree_json))
+        
+        prompt = generate_prompt("YouTube video: "+ video_url, tree_data.tree_json)
+        response = model.generate_content([prompt])
+        new_tree = response.text
+        
+        cleaned_tree_data = clean_and_parse_response(new_tree)
+        if cleaned_tree_data:
+            return cleaned_tree_data
+        else:
+            # If parsing fails, return the raw response for debugging
+            return {"error": "Failed to parse the tree data", "raw_response": new_tree}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
