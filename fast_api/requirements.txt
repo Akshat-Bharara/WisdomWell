@@ -3,7 +3,6 @@ pydantic==1.10.2
 python-dotenv==1.0.0
 uvicorn==0.22.0
 google-generativeai==0.1.0
-shutil
-re
-pathlib
-json
+pytest-shutil==1.8.0
+regex==2024.9.11
+pathlib==1.0.1
