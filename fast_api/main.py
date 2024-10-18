@@ -40,12 +40,13 @@ def generate_prompt(file_type: str, graph_json: Dict[str, Any]):
         "7. If the file is a PDF, parse the document and extract essential sections, topics, and summaries to form nodes, linked with related topics in the graph.\n"
         "8. Ensure all nodes and edges are clearly labeled to maintain clarity in the study graph structure.\n"
         "9. Do not include any \n in the final response."
-        "Please proceed with this task and return the updated JSON structure of the knowledge graph."
+        r"The schema for the knowledge graph is as follows: {nodes: [{id: string, label: string, subtopics: List[string], key_points: List[string], summary: string}, edges: [{source: string, target: string}]}"
+        "The id should be a unique identifier for each node, and the source and target in the edges should correspond to the node ids."
+        "And the id should describe the node in a concise and meaningful way."
     )
 
 def clean_and_parse_response(response_text: str):
     cleaned_graph = re.sub(r'```json\s*|\s*```', '', response_text).strip()
-
     try:
         return json.loads(cleaned_graph)
     except json.JSONDecodeError as e:
@@ -54,90 +55,59 @@ def clean_and_parse_response(response_text: str):
 
 @app.post("/upload/pdf")
 async def upload_pdf(file: UploadFile = File(...), graph_json: str = Form(...)):
+    pdf_path = None
     try:
-        graph_data = GraphData(graph_json=eval(graph_json)) 
-        
+        graph_data = GraphData(graph_json=eval(graph_json))
         pdf_path = Path(f"uploads/{file.filename}")
         pdf_path.parent.mkdir(parents=True, exist_ok=True)
         with pdf_path.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
         uploaded_pdf = genai.upload_file(pdf_path)
-        print(f"PDF uploaded: {uploaded_pdf}")
-        
         prompt = generate_prompt("PDF", graph_data.graph_json)
-        
         response = model.generate_content([prompt, uploaded_pdf])
         new_graph = response.text
-
         cleaned_graph_data = clean_and_parse_response(new_graph)
         
         if cleaned_graph_data:
-            return {"message": "PDF processed successfully", "new_graph": cleaned_graph_data}
+            return cleaned_graph_data
         else:
             raise HTTPException(status_code=500, detail="Failed to parse the graph data")
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+    finally:
+        if pdf_path and pdf_path.exists():
+            pdf_path.unlink()
+
 @app.post("/upload/image")
 async def upload_image(file: UploadFile = File(...), graph_json: str = Form(...)):
+    image_path = None
     try:
-        graph_data = GraphData(graph_json=eval(graph_json))  
-        
+        graph_data = GraphData(graph_json=eval(graph_json))
         image_path = Path(f"uploads/{file.filename}")
         image_path.parent.mkdir(parents=True, exist_ok=True)
         with image_path.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
         uploaded_image = genai.upload_file(image_path)
-        print(f"Image uploaded: {uploaded_image}")
-        
         prompt = generate_prompt("Image", graph_data.graph_json)
-        
         response = model.generate_content([prompt, uploaded_image])
         new_graph = response.text
-
         cleaned_graph_data = clean_and_parse_response(new_graph)
         
         if cleaned_graph_data:
-            return {"message": "Image processed successfully", "new_graph": cleaned_graph_data}
+            return cleaned_graph_data
         else:
             raise HTTPException(status_code=500, detail="Failed to parse the graph data")
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/update/graph")
-async def update_graph(graph_json: str = Form(...)):
-    try:
-        graph_data = GraphData(graph_json=eval(graph_json))  
-        
-        prompt = generate_enhancement_prompt(graph_data.graph_json)
-        
-        response = model.generate_content([prompt])
-        updated_graph = response.text
-
-        cleaned_graph_data = clean_and_parse_response(updated_graph)
-
-        if cleaned_graph_data:
-            return {"message": "Knowledge graph updated successfully", "updated_graph": cleaned_graph_data}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to parse the updated graph data")
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-def generate_enhancement_prompt(existing_graph: Dict[str, Any]):
-    return (
-        f"You are an AI assistant tasked with automatically enhancing a knowledge graph for study purposes."
-        f"The current knowledge graph contains the following information: {existing_graph}. "
-        "Your task is to intelligently refine and optimize this graph structure by:\n"
-        "1. Identifying any gaps or missing concepts that could enhance the understanding of the subject.\n"
-        "2. Returning the updated JSON structure of the knowledge graph in the exact same json format as the existing graph.\n"
-        "3. Return the response in the exact same json format as the existing graph and do not add any other extra information.\n"
-        "4. The response should be in a proper json format with double quotes and not single quotes.\n"
-    )
+    finally:
+        if image_path and image_path.exists():
+            image_path.unlink()
 
 class GraphData(BaseModel):
     graph_json: Dict[str, Any]
